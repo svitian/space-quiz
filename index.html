@@ -23,6 +23,8 @@
       --shadow: 0 16px 40px rgba(39, 54, 102, 0.15);
       --selection-glow: rgba(59, 130, 246, 0.35);
       --selection-panel: rgba(59, 130, 246, 0.18);
+      --star-a: rgba(255, 255, 255, 0.7);
+      --star-b: rgba(172, 206, 255, 0.65);
     }
 
     @media (prefers-color-scheme: dark) {
@@ -43,6 +45,8 @@
         --shadow: 0 18px 42px rgba(0, 0, 0, 0.35);
         --selection-glow: rgba(110, 168, 255, 0.45);
         --selection-panel: rgba(110, 168, 255, 0.2);
+        --star-a: rgba(237, 245, 255, 0.6);
+        --star-b: rgba(126, 177, 255, 0.5);
       }
     }
 
@@ -61,6 +65,33 @@
       font-size: 15px;
       line-height: 1.5;
       color: var(--text);
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    body::before,
+    body::after {
+      content: "";
+      position: fixed;
+      inset: -20%;
+      pointer-events: none;
+      z-index: 0;
+      will-change: transform;
+    }
+
+    body::before {
+      background:
+        radial-gradient(circle, var(--star-a) 0 1px, transparent 1.5px) 0 0 / 160px 160px,
+        radial-gradient(circle, var(--star-b) 0 1.1px, transparent 1.6px) 80px 60px / 220px 220px;
+      opacity: 0.45;
+      animation: drift-stars 38s linear infinite;
+    }
+
+    body::after {
+      background:
+        radial-gradient(circle, rgba(255, 255, 255, 0.75) 0 0.8px, transparent 1.3px) 15px 25px / 140px 140px;
+      opacity: 0.2;
+      animation: twinkle-stars 6s ease-in-out infinite alternate;
     }
 
     .app {
@@ -70,6 +101,8 @@
       border-radius: 18px;
       box-shadow: var(--shadow);
       padding: clamp(1rem, 2.7vw, 1.8rem);
+      position: relative;
+      z-index: 1;
     }
 
     h1 {
@@ -153,7 +186,17 @@
     .choice:focus-visible,
     .action:focus-visible {
       outline: 3px solid var(--focus);
-      outline-offset: 2px;
+      outline-offset: 3px;
+      box-shadow: 0 0 0 5px color-mix(in oklab, var(--focus) 28%, transparent);
+    }
+
+    .choice:focus-visible {
+      border-color: var(--focus);
+      transform: translateY(-1px);
+    }
+
+    .action:focus-visible {
+      filter: brightness(1.08);
     }
 
     .choice.selected {
@@ -265,6 +308,9 @@
       gap: 0.8rem;
       justify-items: center;
       margin-top: 1rem;
+      position: relative;
+      padding: 0.2rem;
+      overflow: hidden;
     }
 
     .result.show {
@@ -279,6 +325,48 @@
     .result h2 {
       margin: 0;
       font-size: clamp(1.25rem, 2.4vw, 1.6rem);
+    }
+
+    .result.celebration {
+      border: 1px solid color-mix(in oklab, var(--success) 45%, var(--border));
+      border-radius: 14px;
+      background:
+        radial-gradient(circle at 20% 20%, color-mix(in oklab, var(--success) 20%, transparent), transparent 36%),
+        radial-gradient(circle at 80% 15%, color-mix(in oklab, var(--primary) 17%, transparent), transparent 38%),
+        color-mix(in oklab, var(--surface) 92%, transparent);
+      box-shadow: 0 0 0 3px color-mix(in oklab, var(--success) 24%, transparent);
+      padding: 1rem 0.75rem;
+    }
+
+    .result.celebration::before,
+    .result.celebration::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 14% 18%, color-mix(in oklab, var(--success) 70%, transparent) 0 2px, transparent 3px),
+        radial-gradient(circle at 86% 24%, color-mix(in oklab, var(--primary) 70%, transparent) 0 2px, transparent 3px),
+        radial-gradient(circle at 22% 76%, color-mix(in oklab, var(--focus) 60%, transparent) 0 1.8px, transparent 3px),
+        radial-gradient(circle at 78% 82%, color-mix(in oklab, var(--success) 60%, transparent) 0 2.2px, transparent 3px);
+      opacity: 0.7;
+      animation: confetti-float 4.6s ease-in-out infinite;
+    }
+
+    .result.celebration::after {
+      animation-delay: 0.9s;
+      opacity: 0.45;
+    }
+
+    .result-badge {
+      margin: 0;
+      border-radius: 999px;
+      padding: 0.3rem 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      color: var(--success);
+      border: 1px solid color-mix(in oklab, var(--success) 55%, var(--border));
+      background: color-mix(in oklab, var(--success-bg) 75%, var(--surface));
     }
 
     .sr-only {
@@ -312,10 +400,30 @@
       100% { transform: translateY(14%); }
     }
 
+    @keyframes drift-stars {
+      from { transform: translateY(0) translateX(0); }
+      to { transform: translateY(70px) translateX(-38px); }
+    }
+
+    @keyframes twinkle-stars {
+      0% { opacity: 0.12; }
+      100% { opacity: 0.27; }
+    }
+
+    @keyframes confetti-float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-6px); }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after {
         animation: none !important;
         transition: none !important;
+      }
+
+      body::before,
+      body::after {
+        transform: none !important;
       }
     }
   </style>
@@ -351,8 +459,9 @@
 
     <section id="result" class="result" aria-live="polite">
       <div class="emoji" id="result-emoji" aria-hidden="true">🌟</div>
-      <h2>Quiz Complete!</h2>
+      <h2 id="result-title">Quiz Complete!</h2>
       <p id="result-score"></p>
+      <p id="result-badge" class="result-badge" hidden>🌟 Stellar performance: 8+ correct!</p>
       <p id="result-message" class="subtle"></p>
       <button id="restart-btn" class="action" type="button">Play Again</button>
     </section>
@@ -425,7 +534,9 @@
     const nextBtn = document.getElementById("next-btn");
     const quizSection = document.getElementById("quiz-section");
     const resultSection = document.getElementById("result");
+    const resultTitle = document.getElementById("result-title");
     const resultScore = document.getElementById("result-score");
+    const resultBadge = document.getElementById("result-badge");
     const resultMessage = document.getElementById("result-message");
     const resultEmoji = document.getElementById("result-emoji");
     const restartBtn = document.getElementById("restart-btn");
@@ -549,9 +660,13 @@
     function showResults() {
       quizSection.hidden = true;
       resultSection.classList.add("show");
+      const isCelebratory = score >= 8;
+      resultSection.classList.toggle("celebration", isCelebratory);
       const { emoji, message } = getResultSummary(score, quizData.length);
       resultEmoji.textContent = emoji;
+      resultTitle.textContent = isCelebratory ? "Mission Accomplished!" : "Quiz Complete!";
       resultScore.textContent = `Final Score: ${score} / ${quizData.length}`;
+      resultBadge.hidden = !isCelebratory;
       resultMessage.textContent = message;
       liveRegion.textContent = `Quiz complete. Final score ${score} out of ${quizData.length}.`;
       restartBtn.focus();
@@ -572,6 +687,8 @@
       score = 0;
       quizSection.hidden = false;
       resultSection.classList.remove("show");
+      resultSection.classList.remove("celebration");
+      resultBadge.hidden = true;
       renderQuestion();
     }
 
