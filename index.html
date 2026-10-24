@@ -130,6 +130,11 @@
       font-weight: 600;
     }
 
+    #best-label {
+      color: var(--muted);
+      font-weight: 600;
+    }
+
     .meter {
       height: 12px;
       border-radius: 999px;
@@ -369,6 +374,52 @@
       background: color-mix(in oklab, var(--success-bg) 75%, var(--surface));
     }
 
+    .review {
+      width: min(100%, 560px);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.85rem;
+      text-align: left;
+      background: color-mix(in oklab, var(--surface) 90%, transparent);
+    }
+
+    .review h3 {
+      margin: 0 0 0.45rem;
+      font-size: 1.03rem;
+    }
+
+    .review-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 0.65rem;
+    }
+
+    .review-item {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.68rem;
+      background: var(--surface);
+    }
+
+    .review-item p {
+      margin: 0.2rem 0;
+      line-height: 1.4;
+    }
+
+    .review-label {
+      font-weight: 700;
+    }
+
+    .review-wrong {
+      color: var(--danger);
+    }
+
+    .review-correct {
+      color: var(--success);
+    }
+
     .sr-only {
       position: absolute;
       width: 1px;
@@ -440,6 +491,7 @@
         <div class="meta">
           <span id="progress-label" aria-live="polite">Question 1 of 10</span>
           <span id="score-label">Score: 0</span>
+          <span id="best-label">Best: --</span>
         </div>
         <div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="10" aria-labelledby="progress-label">
           <span id="progress-bar"></span>
@@ -459,14 +511,21 @@
 
     <section id="result" class="result" aria-live="polite">
       <div class="emoji" id="result-emoji" aria-hidden="true">🌟</div>
-      <h2 id="result-title">Quiz Complete!</h2>
+      <h2 id="result-title" tabindex="-1">Quiz Complete!</h2>
       <p id="result-score"></p>
+      <p id="result-best" class="subtle"></p>
       <p id="result-badge" class="result-badge" hidden>🌟 Stellar performance: 8+ correct!</p>
       <p id="result-message" class="subtle"></p>
+      <section id="review-section" class="review" aria-labelledby="review-title" hidden>
+        <h3 id="review-title">Review your answers</h3>
+        <p id="review-perfect" class="subtle" hidden></p>
+        <ul id="review-list" class="review-list"></ul>
+      </section>
       <button id="restart-btn" class="action" type="button">Play Again</button>
     </section>
 
-    <p id="a11y-live" class="sr-only" aria-live="assertive"></p>
+    <p id="a11y-live-polite" class="sr-only" aria-live="polite" aria-atomic="true"></p>
+    <p id="a11y-live-assertive" class="sr-only" aria-live="assertive" aria-atomic="true"></p>
   </main>
 
   <script>
@@ -527,6 +586,7 @@
     const progressBar = document.getElementById("progress-bar");
     const progressMeter = progressBar.parentElement;
     const scoreLabel = document.getElementById("score-label");
+    const bestLabel = document.getElementById("best-label");
     const questionEl = document.getElementById("question");
     const choicesEl = document.getElementById("choices");
     const feedbackEl = document.getElementById("feedback");
@@ -536,16 +596,108 @@
     const resultSection = document.getElementById("result");
     const resultTitle = document.getElementById("result-title");
     const resultScore = document.getElementById("result-score");
+    const resultBest = document.getElementById("result-best");
     const resultBadge = document.getElementById("result-badge");
     const resultMessage = document.getElementById("result-message");
     const resultEmoji = document.getElementById("result-emoji");
+    const reviewSection = document.getElementById("review-section");
+    const reviewPerfect = document.getElementById("review-perfect");
+    const reviewList = document.getElementById("review-list");
     const restartBtn = document.getElementById("restart-btn");
-    const liveRegion = document.getElementById("a11y-live");
+    const politeLiveRegion = document.getElementById("a11y-live-polite");
+    const assertiveLiveRegion = document.getElementById("a11y-live-assertive");
 
+    const BEST_SCORE_KEY = "space-quiz.best-score.v1";
     let currentIndex = 0;
     let score = 0;
     let selectedIndex = null;
     let answered = false;
+    let answers = [];
+    let bestScore = null;
+    let storageEnabled = true;
+
+    function announce(region, message) {
+      region.textContent = "";
+      const schedule = typeof window.requestAnimationFrame === "function"
+        ? window.requestAnimationFrame.bind(window)
+        : (callback) => window.setTimeout(callback, 0);
+      schedule(() => {
+        region.textContent = message;
+      });
+    }
+
+    function loadBestScore() {
+      try {
+        const stored = window.localStorage.getItem(BEST_SCORE_KEY);
+        if (stored === null) return null;
+        const parsed = Number.parseInt(stored, 10);
+        return Number.isFinite(parsed) ? parsed : null;
+      } catch {
+        storageEnabled = false;
+        return null;
+      }
+    }
+
+    function saveBestScore(value) {
+      if (!storageEnabled) return;
+      try {
+        window.localStorage.setItem(BEST_SCORE_KEY, String(value));
+      } catch {
+        storageEnabled = false;
+      }
+    }
+
+    function renderBestScore() {
+      const bestText = bestScore === null ? "--" : `${bestScore} / ${quizData.length}`;
+      bestLabel.textContent = `Best: ${bestText}`;
+      if (!storageEnabled && bestScore === null) {
+        resultBest.textContent = "Best score: unavailable in this browser session.";
+      } else {
+        resultBest.textContent = `Best score: ${bestText}`;
+      }
+    }
+
+    function updateBestScore() {
+      if (bestScore === null || score > bestScore) {
+        bestScore = score;
+        saveBestScore(bestScore);
+      }
+      renderBestScore();
+    }
+
+    function clearReview() {
+      reviewList.innerHTML = "";
+      reviewPerfect.textContent = "";
+      reviewPerfect.hidden = true;
+      reviewList.hidden = false;
+      reviewSection.hidden = true;
+    }
+
+    function renderReview() {
+      clearReview();
+      const missed = answers
+        .map((answer, index) => ({ ...answer, number: index + 1 }))
+        .filter((answer) => answer && !answer.isCorrect);
+
+      reviewSection.hidden = false;
+      if (missed.length === 0) {
+        reviewList.hidden = true;
+        reviewPerfect.hidden = false;
+        reviewPerfect.textContent = "🎉 Perfect score! You answered every question correctly.";
+        return;
+      }
+
+      missed.forEach((entry) => {
+        const item = document.createElement("li");
+        item.className = "review-item";
+        item.innerHTML = `
+          <p><strong>Question ${entry.number}:</strong> ${entry.question}</p>
+          <p><span class="review-label review-wrong">Your answer:</span> ${entry.selectedAnswer}</p>
+          <p><span class="review-label review-correct">Correct answer:</span> ${entry.correctAnswer}</p>
+        `;
+        reviewList.appendChild(item);
+      });
+    }
 
     function setFeedbackState(type, message) {
       feedbackEl.classList.remove("correct", "incorrect");
@@ -580,7 +732,10 @@
       progressMeter.setAttribute("aria-valuenow", String(Math.round(progress)));
       progressLabel.textContent = `Question ${currentIndex + 1} of ${quizData.length}`;
       scoreLabel.textContent = `Score: ${score}`;
-      liveRegion.textContent = `Loaded question ${currentIndex + 1}.`;
+      announce(
+        politeLiveRegion,
+        `Question ${currentIndex + 1} of ${quizData.length}: ${item.question}`
+      );
       const firstChoice = choicesEl.querySelector(".choice");
       if (firstChoice) firstChoice.focus();
     }
@@ -600,12 +755,16 @@
       if (answered) return;
       if (selectedIndex === null) {
         setFeedbackState("incorrect", "<strong>Choose an answer first:</strong> select one option before submitting.");
-        liveRegion.textContent = "No answer selected.";
+        announce(assertiveLiveRegion, "Choose an answer before submitting.");
+        const firstChoice = choicesEl.querySelector(".choice");
+        if (firstChoice) firstChoice.focus();
         return;
       }
 
       const item = quizData[currentIndex];
       const isCorrect = selectedIndex === item.answer;
+      const selectedAnswer = item.options[selectedIndex];
+      const correctAnswer = item.options[item.answer];
       answered = true;
       submitBtn.disabled = true;
       nextBtn.disabled = false;
@@ -620,13 +779,13 @@
 
       if (isCorrect) {
         score += 1;
-        setFeedbackState("correct", "<strong>✅ Correct!</strong> Great job — that answer is right.");
-        liveRegion.textContent = "Correct answer.";
+        setFeedbackState("correct", `<strong>✅ Correct!</strong> ${correctAnswer} is the right answer.`);
+        announce(assertiveLiveRegion, `Correct. ${correctAnswer} is the right answer.`);
       } else {
-        const answerText = item.options[item.answer];
-        setFeedbackState("incorrect", `<strong>❌ Not quite.</strong> The correct answer is: <strong>${answerText}</strong>.`);
-        liveRegion.textContent = "Incorrect answer.";
+        setFeedbackState("incorrect", `<strong>❌ Not quite.</strong> You chose <strong>${selectedAnswer}</strong>. The correct answer is <strong>${correctAnswer}</strong>.`);
+        announce(assertiveLiveRegion, `Incorrect. You chose ${selectedAnswer}. The correct answer is ${correctAnswer}.`);
       }
+      answers[currentIndex] = { question: item.question, selectedAnswer, correctAnswer, isCorrect };
       scoreLabel.textContent = `Score: ${score}`;
       nextBtn.focus();
     }
@@ -660,6 +819,8 @@
     function showResults() {
       quizSection.hidden = true;
       resultSection.classList.add("show");
+      updateBestScore();
+      renderReview();
       const isCelebratory = score >= 8;
       resultSection.classList.toggle("celebration", isCelebratory);
       const { emoji, message } = getResultSummary(score, quizData.length);
@@ -668,8 +829,8 @@
       resultScore.textContent = `Final Score: ${score} / ${quizData.length}`;
       resultBadge.hidden = !isCelebratory;
       resultMessage.textContent = message;
-      liveRegion.textContent = `Quiz complete. Final score ${score} out of ${quizData.length}.`;
-      restartBtn.focus();
+      announce(assertiveLiveRegion, `Quiz complete. Final score ${score} out of ${quizData.length}.`);
+      resultTitle.focus();
     }
 
     function goNext() {
@@ -685,10 +846,13 @@
     function restartQuiz() {
       currentIndex = 0;
       score = 0;
+      answers = [];
       quizSection.hidden = false;
       resultSection.classList.remove("show");
       resultSection.classList.remove("celebration");
       resultBadge.hidden = true;
+      clearReview();
+      renderBestScore();
       renderQuestion();
     }
 
@@ -696,6 +860,8 @@
     nextBtn.addEventListener("click", goNext);
     restartBtn.addEventListener("click", restartQuiz);
 
+    bestScore = loadBestScore();
+    renderBestScore();
     renderQuestion();
   </script>
 </body>
